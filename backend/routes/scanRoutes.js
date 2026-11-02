@@ -12,19 +12,24 @@ const router = express.Router();
  */
 router.post('/analyze', authMiddleware, validate(analyzeRequestSchema), async (req, res) => {
   try {
-    const { message } = req.validatedBody;
+    const { message, phoneNumber, inputType } = req.validatedBody;
     const userId = req.user.id;
     const userEmail = req.user.email;
 
-    console.log(`[Scan API] Analyzing message (${message.length} chars) for user ${userId}`);
+    console.log(`[Scan API] Analyzing input (${message.length} chars, type: ${inputType || 'text'}, phone: ${phoneNumber || 'none'}) for user ${userId}`);
 
     // Call Gemini AI service
-    const analysis = await analyzeMessageWithGemini(message);
+    const analysis = await analyzeMessageWithGemini(message, { phoneNumber, inputType });
+
+    // Format raw message to preserve phone caller ID if provided separately
+    const formattedRawMessage = phoneNumber && !message.includes(phoneNumber)
+      ? `[Caller/Sender: ${phoneNumber}] ${message}`
+      : message;
 
     // Persist scan tied to authenticated user
     const savedRecord = await saveScan({
       userId,
-      rawMessage: message,
+      rawMessage: formattedRawMessage,
       analysis,
       userEmail,
     });

@@ -62,13 +62,18 @@ const analysisSchema = {
   required: ["riskLevel", "riskScore", "category", "explanation", "warningSigns", "recommendations", "spamChain"]
 };
 
-const SYSTEM_INSTRUCTION = `You are SpamChain AI, an elite cybersecurity assistant and threat intelligence parser. Your job is to analyze incoming user messages (SMS, emails, chats) to determine if they are legitimate or malicious. You break down attacks into a sequential 5-step "Spam Chain" to reveal the exact mechanics of the social engineering or technical trap. Be rigorous, objective, and precise.
+const SYSTEM_INSTRUCTION = `You are SpamChain AI, an elite cybersecurity assistant and threat intelligence parser. Your job is to analyze incoming user messages (SMS, emails, chats, incoming phone numbers/caller IDs, and call/voicemail transcripts) to determine if they are legitimate, spam, or malicious scams. You break down attacks into a sequential 5-step "Spam Chain" to reveal the exact mechanics of the social engineering or technical trap. Be rigorous, objective, and precise.
+
+Input Types Handled:
+- SMS / Text Messages: Package smishing, bank panic alerts, 2FA credential theft, crypto giveaways.
+- Phone Numbers / Caller IDs: Toll-free spoofing (+1-800, +1-888), Wangiri one-ring callback traps (+232, +247), VoIP spoofing.
+- Call Transcripts / Voicemails: IRS/Police arrest threats, vehicle warranty robocalls, utility power shutoffs, tech support refund traps.
 
 Categories:
 - PHISHING: Fake logins, credential harvesting, unauthorized account takeovers.
 - FINANCIAL_SCAM: Bank charge alerts, cryptocurrency schemes, lottery/tax refunds, unauthorized transactions.
 - SMISHING: SMS-based delivery traps (USPS/UPS/FedEx), toll penalties, package address updates.
-- SOCIAL_ENGINEERING: Impersonation of boss/coworker, distressed family member emergencies, fake tech support.
+- SOCIAL_ENGINEERING: Impersonation of boss/coworker, distressed family member emergencies, fake tech support, law enforcement robocalls.
 - GENERAL_SPAM: Unsolicited promotional blasts, marketing newsletters, junk ads without malicious payloads.
 - SAFE: Normal interpersonal or transactional messages with verifiable context.
 
@@ -82,19 +87,107 @@ Ensure riskScore is calibrated:
  * Fallback heuristic intelligence engine used when GEMINI_API_KEY is missing or during API downtime.
  * Conforms strictly to analysisSchema.
  */
-function runHeuristicAnalysis(message) {
+function runHeuristicAnalysis(message, options = {}) {
   const text = message.toLowerCase();
+  const inputType = options.inputType || 'text';
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.(xyz|top|ru|cn|buzz|link|info|live|click|cfd|online|app|page\.link|is|cc|to)[^\s]*)/gi;
   const urls = message.match(urlRegex) || [];
   const hasUrl = urls.length > 0;
   
   // Indicators
+  const isRobocall = /warrant|arrest|irs|internal revenue|social security|magistrate|sheriff|police|extended warranty|car warranty|power shutoff|electric bill|disconnect in|geek squad|auto-renewal|mcafee|norton|press 1 to speak|leave a message immediately|legal enforcement/i.test(text);
+  const isPhoneLookup = inputType === 'phone' || /^(\+?\d{1,4}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)[\d-.]{4,12}$/.test(message.trim());
   const isDelivery = /usps|ups|fedex|dhl|package|parcel|postal|warehouse|tracking|toll|undeliver/i.test(text);
   const isFinance = /bank|chase|wells|citi|fraud|unauthorized|charge|usd|\$|wire|bitcoin|crypto|btc|eth|wallet|paypal|zelle|venmo/i.test(text);
   const isUrgent = /urgent|immediately|within 24 hours|suspend|action required|alert|penalty|final notice|freeze|locked|now/i.test(text);
   const isCrypto = /giveaway|send 0\.|receive 1|elon|musk|airdrop|binance|double your/i.test(text);
   const isCredentials = /login|verify your account|password|otp|pin|ssn|social security|identity/i.test(text);
   const isMarketing = /discount|off today|sale|unsubscribe|promo|coupon|deal/i.test(text);
+
+  if (isRobocall) {
+    return {
+      riskLevel: "Scam",
+      riskScore: 97,
+      category: "SOCIAL_ENGINEERING",
+      explanation: "High-severity impersonation robocall utilizing aggressive legal coercion, arrest threats, or fraudulent auto-renewal traps to intimidate the target into complying with a rogue operator.",
+      warningSigns: [
+        "Coercive legal threats claiming law enforcement or government action.",
+        "Manufactured panic demanding immediate financial settlement.",
+        "Interactive voice response (IVR) trap prompting victims to 'Press 1'.",
+        "Sender caller ID likely spoofed via unverified VoIP gateway."
+      ],
+      recommendations: [
+        "Hang up immediately. Government agencies (IRS, SSA, Police) never threaten arrest over telephone.",
+        "Never press any key (e.g. 'Press 1') — this confirms your number is active to robocall syndicates.",
+        "Block the phone number on your mobile handset immediately.",
+        "File an official fraud complaint with the FTC (reportfraud.ftc.gov)."
+      ],
+      spamChain: {
+        sender: "Automated robocall dialer spoofing authority or corporate identity.",
+        urgency: "Immediate ultimatum claiming imminent arrest, suspension, or penalty.",
+        suspiciousLink: "Inbound voice hook or IVR transfer connecting to offshore boiler room.",
+        informationRequest: "Demands payment via wire, cryptocurrency, or gift cards, or disclosure of SSN.",
+        finalRiskSummary: "Total identity theft and direct financial loss with zero legal recourse."
+      }
+    };
+  }
+
+  if (isPhoneLookup) {
+    const isWangiri = /\+?(232|247|224|248|675|373|881|882)/.test(text);
+    const isTollFree = /\b(800|888|877|866|855|844|833)\b/.test(text);
+
+    if (isWangiri) {
+      return {
+        riskLevel: "Scam",
+        riskScore: 96,
+        category: "FINANCIAL_SCAM",
+        explanation: "Identified high-risk international destination number indicative of a Wangiri 'one-ring' callback scam designed to bill exorbitant long-distance rates.",
+        warningSigns: [
+          "International country code associated with premium rate toll fraud.",
+          "Typically rings once or twice to bait victims into calling back.",
+          "Connecting can incur unauthorized international charges exceeding $15–$50/min."
+        ],
+        recommendations: [
+          "Do NOT call back this phone number under any circumstances.",
+          "Block the caller immediately on your phone device.",
+          "Report the number to your cellular carrier's spam line (7726)."
+        ],
+        spamChain: {
+          sender: `International toll fraud gateway (${message.trim()}).`,
+          urgency: "Missed call notification inducing curiosity or worry.",
+          suspiciousLink: `Callback telephone hook: ${message.trim()}`,
+          informationRequest: "Baiting an active voice call to bill premium international carrier tariffs.",
+          finalRiskSummary: "Direct unauthorized charges on your cellular phone bill."
+        }
+      };
+    }
+
+    if (isTollFree) {
+      return {
+        riskLevel: "Suspicious",
+        riskScore: 78,
+        category: "SOCIAL_ENGINEERING",
+        explanation: "Unverified toll-free number. While legitimate enterprises use toll-free lines, scammers routinely spoof 1-800/1-888 numbers to impersonate bank fraud prevention desks.",
+        warningSigns: [
+          "Toll-free originators can be easily spoofed using virtual VoIP trunks.",
+          "Commonly paired with fake SMS alerts claiming unauthorized credit card charges.",
+          "Caller identity cannot be authenticated without cross-checking official card records."
+        ],
+        recommendations: [
+          "Do not call this number directly if received via unexpected SMS or voicemail.",
+          "Call the official phone number stamped on the back of your physical bank card.",
+          "Never read out two-factor SMS passcodes to anyone calling from an 800-number."
+        ],
+        spamChain: {
+          sender: `Spoofed toll-free caller profile (${message.trim()}).`,
+          urgency: "Commonly paired with urgent account freeze alerts.",
+          suspiciousLink: `Direct dial hotline: ${message.trim()}`,
+          informationRequest: "Attempting to harvest bank credentials, CVV, or one-time passcodes.",
+          finalRiskSummary: "Unauthorized banking transfer or account takeover if engaged."
+        }
+      };
+    }
+  }
 
   if (isCrypto) {
     return {
@@ -284,18 +377,23 @@ function runHeuristicAnalysis(message) {
  * Main analysis function that queries Google Gemini API using @google/genai.
  * Gracefully falls back to heuristic engine if API key is not configured or in error.
  */
-export async function analyzeMessageWithGemini(messageText) {
+export async function analyzeMessageWithGemini(messageText, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
 
   // Check if API key is real and configured
   if (!apiKey || apiKey.trim() === '' || apiKey.includes('your_gemini_api_key')) {
     console.warn('[AI Service] GEMINI_API_KEY not configured. Running heuristic intelligence engine.');
-    return runHeuristicAnalysis(messageText);
+    return runHeuristicAnalysis(messageText, options);
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+
+    // Format prompt with context
+    const contextType = options.inputType ? `[Input Channel: ${options.inputType.toUpperCase()}]` : '';
+    const phoneContext = options.phoneNumber ? `[Caller ID / Originating Phone: ${options.phoneNumber}]` : '';
+    const promptText = `${contextType} ${phoneContext}\nTarget Content to evaluate:\n${messageText}`.trim();
 
     // Wrap in a promise timeout to ensure prompt responsiveness
     const timeoutPromise = new Promise((_, reject) => 
@@ -304,7 +402,7 @@ export async function analyzeMessageWithGemini(messageText) {
 
     const generatePromise = ai.models.generateContent({
       model: model,
-      contents: messageText,
+      contents: promptText,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
@@ -340,7 +438,7 @@ export async function analyzeMessageWithGemini(messageText) {
   } catch (error) {
     console.error('[AI Service] Gemini API call error:', error.message);
     console.warn('[AI Service] Falling back to heuristic threat analysis engine.');
-    return runHeuristicAnalysis(messageText);
+    return runHeuristicAnalysis(messageText, options);
   }
 }
 

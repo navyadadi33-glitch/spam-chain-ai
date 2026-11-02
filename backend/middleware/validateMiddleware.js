@@ -3,12 +3,14 @@ import { z } from 'zod';
 export const analyzeRequestSchema = z.object({
   message: z
     .string({
-      required_error: "Message is required",
+      required_error: "Message or phone number is required",
       invalid_type_error: "Message must be a string",
     })
     .trim()
-    .min(3, "Message must be at least 3 characters")
-    .max(2000, "Message cannot exceed 2000 characters"),
+    .min(3, "Input must be at least 3 characters")
+    .max(2000, "Input cannot exceed 2000 characters"),
+  phoneNumber: z.string().trim().max(50).optional().nullable(),
+  inputType: z.enum(['sms', 'phone', 'call', 'email', 'text']).optional().default('text'),
 });
 
 export function validate(schema) {
