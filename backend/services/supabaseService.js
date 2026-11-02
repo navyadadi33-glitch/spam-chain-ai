@@ -160,7 +160,10 @@ export async function saveScan({ userId, rawMessage, analysis, userEmail }) {
         console.error('[Supabase Service] DB insert error, falling back to local cache:', error.message);
       } else {
         console.log('[Supabase Service] Scan successfully saved to Supabase PostgreSQL! ID:', data.id);
-        return data;
+        return {
+          ...data,
+          token_highlights: analysis.tokenHighlights || []
+        };
       }
     } catch (err) {
       console.error('[Supabase Service] saveScan exception, using local store:', err.message);
@@ -179,6 +182,7 @@ export async function saveScan({ userId, rawMessage, analysis, userEmail }) {
     warning_signs: analysis.warningSigns,
     recommendations: analysis.recommendations,
     spam_chain: analysis.spamChain,
+    token_highlights: analysis.tokenHighlights || [],
     created_at: new Date().toISOString()
   };
 

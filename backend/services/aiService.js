@@ -32,6 +32,24 @@ const analysisSchema = {
       items: { type: "STRING" }, 
       description: "Actionable cybersecurity recommendations for the recipient." 
     },
+    tokenHighlights: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING", description: "The exact phrase or word from the message that triggered this flag." },
+          category: { 
+            type: "STRING", 
+            enum: ["URGENCY", "AUTHORITY", "MALICIOUS_LINK", "CREDENTIAL_DEMAND", "FINANCIAL_BAIT"],
+            description: "Psychological trigger or attack vector category."
+          },
+          explanation: { type: "STRING", description: "Brief explanation of why this specific phrase is deceptive or risky." },
+          severity: { type: "INTEGER", description: "Threat severity from 1 (minor) to 10 (lethal)." }
+        },
+        required: ["text", "category", "explanation", "severity"]
+      },
+      description: "Granular Explainable AI (XAI) tokens and phrases indicating threat triggers."
+    },
     spamChain: {
       type: "OBJECT",
       properties: {
@@ -84,6 +102,69 @@ Ensure riskScore is calibrated:
 - Scam: 80 - 100`;
 
 /**
+ * Granular heuristic token extractor for Explainable AI (XAI)
+ */
+export function extractHeuristicHighlights(messageText) {
+  if (!messageText || typeof messageText !== 'string') return [];
+  const highlights = [];
+  const text = messageText;
+
+  const rules = [
+    {
+      category: 'URGENCY',
+      regex: /\b(urgent|immediately|within \d+ hours|suspend|action required|final notice|freeze|locked|now|cannot be delivered|past due|shutoff|warrant|arrest|legal enforcement|penalty|expires today|act now|critical alert)\b/gi,
+      explanation: 'Artificial urgency designed to bypass critical thinking and induce panic.',
+      severity: 9
+    },
+    {
+      category: 'AUTHORITY',
+      regex: /\b(usps|ups|fedex|dhl|irs|internal revenue|social security|bank of america|chase|wells fargo|citi|paypal|geek squad|sheriff|police|apple|amazon|mcafee|norton|postal service|customer support)\b/gi,
+      explanation: 'Brand or governmental authority impersonation to manufacture unearned trust.',
+      severity: 8
+    },
+    {
+      category: 'MALICIOUS_LINK',
+      regex: /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.(xyz|top|ru|cn|buzz|link|info|live|click|cfd|online|app|page\.link|is|cc|to)[^\s]*|\b(call 1-800|call 1-888|update info at|verify at|click here|tap here)\b)/gi,
+      explanation: 'External contact hook or suspicious domain directing to an unverified third-party destination.',
+      severity: 10
+    },
+    {
+      category: 'CREDENTIAL_DEMAND',
+      regex: /\b(password|pin|otp|ssn|social security number|cvv|credit card|login credentials|verify your account|update info|billing information|two-factor|passcode)\b/gi,
+      explanation: 'Harvesting sensitive credentials or identity tokens for unauthorized account takeover.',
+      severity: 10
+    },
+    {
+      category: 'FINANCIAL_BAIT',
+      regex: /(\$\d+(\.\d{2})?|usd|\b0\.\d+ btc\b|\b\d+ btc\b|giveaway|fraudulent charge|refund|wire transfer|zelle|venmo|cashapp|gift cards?|bitcoin)/gi,
+      explanation: 'Financial bait or fabricated loss to manipulate greed or fear.',
+      severity: 8
+    }
+  ];
+
+  const seen = new Set();
+  for (const rule of rules) {
+    let match;
+    const re = new RegExp(rule.regex);
+    while ((match = re.exec(text)) !== null) {
+      const matchText = match[0].trim();
+      const lower = matchText.toLowerCase();
+      if (!seen.has(lower) && matchText.length > 1) {
+        seen.add(lower);
+        highlights.push({
+          text: matchText,
+          category: rule.category,
+          explanation: rule.explanation,
+          severity: rule.severity
+        });
+      }
+    }
+  }
+
+  return highlights;
+}
+
+/**
  * Fallback heuristic intelligence engine used when GEMINI_API_KEY is missing or during API downtime.
  * Conforms strictly to analysisSchema.
  */
@@ -93,6 +174,7 @@ function runHeuristicAnalysis(message, options = {}) {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.(xyz|top|ru|cn|buzz|link|info|live|click|cfd|online|app|page\.link|is|cc|to)[^\s]*)/gi;
   const urls = message.match(urlRegex) || [];
   const hasUrl = urls.length > 0;
+  const tokenHighlights = extractHeuristicHighlights(message);
   
   // Indicators
   const isRobocall = /warrant|arrest|irs|internal revenue|social security|magistrate|sheriff|police|extended warranty|car warranty|power shutoff|electric bill|disconnect in|geek squad|auto-renewal|mcafee|norton|press 1 to speak|leave a message immediately|legal enforcement/i.test(text);
@@ -104,8 +186,10 @@ function runHeuristicAnalysis(message, options = {}) {
   const isCredentials = /login|verify your account|password|otp|pin|ssn|social security|identity/i.test(text);
   const isMarketing = /discount|off today|sale|unsubscribe|promo|coupon|deal/i.test(text);
 
+  let result;
+
   if (isRobocall) {
-    return {
+    result = {
       riskLevel: "Scam",
       riskScore: 97,
       category: "SOCIAL_ENGINEERING",
@@ -130,14 +214,12 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Total identity theft and direct financial loss with zero legal recourse."
       }
     };
-  }
-
-  if (isPhoneLookup) {
+  } else if (isPhoneLookup) {
     const isWangiri = /\+?(232|247|224|248|675|373|881|882)/.test(text);
     const isTollFree = /\b(800|888|877|866|855|844|833)\b/.test(text);
 
     if (isWangiri) {
-      return {
+      result = {
         riskLevel: "Scam",
         riskScore: 96,
         category: "FINANCIAL_SCAM",
@@ -160,10 +242,8 @@ function runHeuristicAnalysis(message, options = {}) {
           finalRiskSummary: "Direct unauthorized charges on your cellular phone bill."
         }
       };
-    }
-
-    if (isTollFree) {
-      return {
+    } else if (isTollFree) {
+      result = {
         riskLevel: "Suspicious",
         riskScore: 78,
         category: "SOCIAL_ENGINEERING",
@@ -186,11 +266,25 @@ function runHeuristicAnalysis(message, options = {}) {
           finalRiskSummary: "Unauthorized banking transfer or account takeover if engaged."
         }
       };
+    } else {
+      result = {
+        riskLevel: "Suspicious",
+        riskScore: 45,
+        category: "SOCIAL_ENGINEERING",
+        explanation: "Standard phone number without verified caller reputation data. Exercise vigilance before disclosing personal info.",
+        warningSigns: ["Unregistered personal or VoIP number", "No corporate verified caller ID present"],
+        recommendations: ["Screen the call with voicemail before answering", "Never give credentials over an unverified call"],
+        spamChain: {
+          sender: `Unverified phone number: ${message.trim()}`,
+          urgency: "Pending user interaction",
+          suspiciousLink: "Inbound voice/SMS channel",
+          informationRequest: "Verification of live telephone line",
+          finalRiskSummary: "Risk of contact harvesting for future scam blitzes"
+        }
+      };
     }
-  }
-
-  if (isCrypto) {
-    return {
+  } else if (isCrypto) {
+    result = {
       riskLevel: "Scam",
       riskScore: 98,
       category: "FINANCIAL_SCAM",
@@ -214,10 +308,8 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Total loss of transferred funds with zero recourse due to blockchain irreversibility."
       }
     };
-  }
-
-  if (isDelivery) {
-    return {
+  } else if (isDelivery) {
+    result = {
       riskLevel: "Scam",
       riskScore: 92,
       category: "SMISHING",
@@ -241,10 +333,8 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Severe credit card fraud and identity compromise if details are submitted."
       }
     };
-  }
-
-  if (isFinance) {
-    return {
+  } else if (isFinance) {
+    result = {
       riskLevel: "Scam",
       riskScore: 94,
       category: "FINANCIAL_SCAM",
@@ -268,10 +358,8 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Complete takeover of bank or payment account leading to unauthorized transfers."
       }
     };
-  }
-
-  if (isCredentials) {
-    return {
+  } else if (isCredentials) {
+    result = {
       riskLevel: "Scam",
       riskScore: 89,
       category: "PHISHING",
@@ -294,10 +382,8 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Account takeover and potential lateral access to connected services."
       }
     };
-  }
-
-  if (isMarketing) {
-    return {
+  } else if (isMarketing) {
+    result = {
       riskLevel: "Spam",
       riskScore: 62,
       category: "GENERAL_SPAM",
@@ -320,10 +406,8 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Unwanted marketing tracking and potential recurring billing traps."
       }
     };
-  }
-
-  if (hasUrl || isUrgent) {
-    return {
+  } else if (hasUrl || isUrgent) {
+    result = {
       riskLevel: "Suspicious",
       riskScore: 48,
       category: "SOCIAL_ENGINEERING",
@@ -346,31 +430,33 @@ function runHeuristicAnalysis(message, options = {}) {
         finalRiskSummary: "Elevated risk of advancing to an active phishing attack if engaged."
       }
     };
+  } else {
+    result = {
+      riskLevel: "Safe",
+      riskScore: 8,
+      category: "SAFE",
+      explanation: "No common malicious payloads, phishing cues, or high-pressure social engineering tactics detected.",
+      warningSigns: [
+        "No suspicious links or known credential harvesting domains.",
+        "Absence of artificial urgency, coercive threats, or financial lures.",
+        "Tone and syntax conform to legitimate interpersonal or business dialogue."
+      ],
+      recommendations: [
+        "Standard cybersecurity hygiene is still recommended.",
+        "Always verify unexpected attachments even from known contacts."
+      ],
+      spamChain: {
+        sender: "Standard sender without evident spoofing indicators.",
+        urgency: "None detected. Natural conversational flow.",
+        suspiciousLink: "No malicious links or redirection tactics detected.",
+        informationRequest: "No sensitive credential, financial, or personal data demanded.",
+        finalRiskSummary: "Low threat. Message appears benign."
+      }
+    };
   }
 
-  // Otherwise Safe
-  return {
-    riskLevel: "Safe",
-    riskScore: 8,
-    category: "SAFE",
-    explanation: "No common malicious payloads, phishing cues, or high-pressure social engineering tactics detected.",
-    warningSigns: [
-      "No suspicious links or known credential harvesting domains.",
-      "Absence of artificial urgency, coercive threats, or financial lures.",
-      "Tone and syntax conform to legitimate interpersonal or business dialogue."
-    ],
-    recommendations: [
-      "Standard cybersecurity hygiene is still recommended.",
-      "Always verify unexpected attachments even from known contacts."
-    ],
-    spamChain: {
-      sender: "Standard sender without evident spoofing indicators.",
-      urgency: "None detected. Natural conversational flow.",
-      suspiciousLink: "No malicious links or redirection tactics detected.",
-      informationRequest: "No sensitive credential, financial, or personal data demanded.",
-      finalRiskSummary: "Low threat. Message appears benign."
-    }
-  };
+  result.tokenHighlights = tokenHighlights;
+  return result;
 }
 
 /**
@@ -427,6 +513,9 @@ export async function analyzeMessageWithGemini(messageText, options = {}) {
       explanation: parsed.explanation || "Analysis generated by SpamChain AI.",
       warningSigns: Array.isArray(parsed.warningSigns) ? parsed.warningSigns : ["Suspicious content detected"],
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : ["Exercise caution before clicking links or replying"],
+      tokenHighlights: (Array.isArray(parsed.tokenHighlights) && parsed.tokenHighlights.length > 0)
+        ? parsed.tokenHighlights
+        : extractHeuristicHighlights(messageText),
       spamChain: {
         sender: parsed.spamChain?.sender || "Unverified sender profile",
         urgency: parsed.spamChain?.urgency || "Pressure tactics detected",
@@ -440,5 +529,107 @@ export async function analyzeMessageWithGemini(messageText, options = {}) {
     console.warn('[AI Service] Falling back to heuristic threat analysis engine.');
     return runHeuristicAnalysis(messageText, options);
   }
+}
+
+/**
+ * Autonomous Counter-Spammer Honeypot Engine
+ * Generates synthetic conversational bait to stall spammers and extract threat intelligence.
+ */
+export async function generateHoneypotReply({ messageHistory = [], persona = 'grandma', scamContext = '' }) {
+  const allText = messageHistory.map(m => m.content).join('\n');
+  const extractedIntel = [];
+
+  // Regex Intel Extractors
+  const btcMatches = allText.match(/\b(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g);
+  if (btcMatches) btcMatches.forEach(addr => extractedIntel.push(`BTC Wallet: ${addr}`));
+
+  const ethMatches = allText.match(/\b(0x[a-fA-F0-9]{40})\b/g);
+  if (ethMatches) ethMatches.forEach(addr => extractedIntel.push(`ETH Wallet: ${addr}`));
+
+  const urlMatches = allText.match(/(https?:\/\/[^\s]+|[a-zA-Z0-9-]+\.(xyz|top|ru|cn|buzz|link|click|cfd)[^\s]*)/gi);
+  if (urlMatches) urlMatches.forEach(u => extractedIntel.push(`Phishing URL: ${u}`));
+
+  const phoneMatches = allText.match(/\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g);
+  if (phoneMatches) phoneMatches.forEach(p => extractedIntel.push(`Suspect Phone: ${p}`));
+
+  const cashAppMatches = allText.match(/(\$[a-zA-Z0-9_]{3,20})/g);
+  if (cashAppMatches) cashAppMatches.forEach(c => extractedIntel.push(`CashApp Handle: ${c}`));
+
+  // Persona instructions
+  const personaPrompts = {
+    grandma: `You are Gertrude, an 81-year-old grandmother. You are sweet, talk about baking cookies or your cat Muffin, easily confused by modern technology, and type with occasional typos. You never send money or gift cards. Keep asking confused questions like 'Which button is the internet?' or 'Can I mail you a check instead?' to stall them. Keep response to 1-2 realistic sentences.`,
+    crypto_noob: `You are Kevin, an over-excited 22-year-old crypto beginner. You only have $40 on Robinhood, think every coin is going to the moon, don't understand gas fees or wallets, and keep asking basic questions about Dogecoin while promising to send funds once you figure out how to copy and paste. Stall with naive enthusiasm. Keep response to 1-2 sentences.`,
+    confused_exec: `You are Richard, a busy VP in back-to-back corporate board meetings. You promise to authorize the wire transfer immediately, but demand an itemized corporate W-9 invoice, purchase order reference number, or ask them to verify their corporate bank routing number first. Stall authoritatively. Keep response to 1-2 sentences.`
+  };
+
+  const selectedInstruction = personaPrompts[persona] || personaPrompts.grandma;
+  const turnsCount = messageHistory.length;
+  const timeWastedMinutes = Math.max(2, Math.round(turnsCount * 3.5));
+  const potentialSavings = 1250;
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey && !apiKey.includes('your_gemini_api_key')) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+      
+      const historyPrompt = messageHistory.map(m => `${m.role === 'scammer' ? 'Scammer' : 'Counter-Agent'}: ${m.content}`).join('\n');
+      const fullPrompt = `${selectedInstruction}\n\nContext of Scam: ${scamContext}\n\nDialogue so far:\n${historyPrompt}\n\nGenerate the next in-character response to stall the scammer:`;
+
+      const resp = await ai.models.generateContent({
+        model,
+        contents: fullPrompt,
+        config: { temperature: 0.7, maxOutputTokens: 120 }
+      });
+
+      if (resp && resp.text) {
+        return {
+          reply: resp.text.trim().replace(/^"(.*)"$/, '$1'),
+          persona,
+          timeWastedMinutes,
+          turnsCount,
+          potentialSavings,
+          extractedIntel: Array.from(new Set(extractedIntel))
+        };
+      }
+    } catch (err) {
+      console.warn('[Honeypot] Gemini API error, falling back to procedural counter-agent dialog:', err.message);
+    }
+  }
+
+  // Fallback procedural counter-responses by persona
+  const proceduralTree = {
+    grandma: [
+      "Oh dear, my glasses are in the kitchen. Is this about the parcel for my grandson Timmy? Which button do I press on this screen?",
+      "I clicked on the blue letters, but now my computer screen is making a funny buzzing noise. Should I restart the microwave?",
+      "Muffin just walked across my keyboard! Could you explain that again very slowly? My neighbor usually helps me with the banking.",
+      "I went to the store to get the Apple Card you asked for, but the young man said they only sell Honeycrisp apples. What do you mean by card?",
+      "My internet browser says 'page not found'. Can I just mail you a personal check with a 50-cent postage stamp instead?"
+    ],
+    crypto_noob: [
+      "Bro is this guaranteed 100x? I only got $45 in Dogecoin right now on Robinhood, how do I transfer that to your wallet?",
+      "Wait, what is a gas fee? It said I need 0.005 ETH to send, can you send me that first so I can unlock the transfer?",
+      "My MetaMask is giving me an error code 404! Should I paste my 12 secret words into Google Translate to fix it?",
+      "Hold up, my discord group is saying this wallet address was flagged on Etherscan. Can you send me your LinkedIn profile to verify?"
+    ],
+    confused_exec: [
+      "I'm in a board meeting with our auditors right now. Please send over an itemized PDF invoice with your company EIN so accounts payable can process this.",
+      "My assistant tried to initiate the wire transfer, but compliance rejected the routing number. What is the swift code and physical corporate address?",
+      "I've flagged this with our VP of Procurement. He requires a dual-authorization signoff before any transfer over $500. Can you hop on a Zoom call to confirm identity?"
+    ]
+  };
+
+  const pool = proceduralTree[persona] || proceduralTree.grandma;
+  const replyIndex = Math.floor(turnsCount / 2) % pool.length;
+  const nextReply = pool[replyIndex] || pool[0];
+
+  return {
+    reply: nextReply,
+    persona,
+    timeWastedMinutes,
+    turnsCount,
+    potentialSavings,
+    extractedIntel: Array.from(new Set(extractedIntel))
+  };
 }
 

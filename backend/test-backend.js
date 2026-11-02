@@ -42,6 +42,35 @@ async function runTests() {
     console.error('❌ AI Analysis output schema mismatch');
   }
 
+  // 2b. XAI Token Highlights
+  console.log('\n--- 2b. Testing XAI Token Highlights ---');
+  if (Array.isArray(analysis.tokenHighlights) && analysis.tokenHighlights.length > 0) {
+    console.log(`✅ Extracted ${analysis.tokenHighlights.length} XAI threat token highlights:`);
+    analysis.tokenHighlights.forEach(h => console.log(`   [${h.category}] "${h.text}" (Sev: ${h.severity}) -> ${h.explanation}`));
+  } else {
+    console.error('❌ No token highlights extracted');
+  }
+
+  // 2c. Honeypot Counter-Agent
+  console.log('\n--- 2c. Testing ScamBaiter Honeypot ---');
+  const { generateHoneypotReply } = await import('./services/aiService.js');
+  const honeypotRes = await generateHoneypotReply({
+    messageHistory: [
+      { role: 'scammer', content: "USPS: Pay $1.50 at http://usps-update.top or package is returned. Or send 0.05 BTC to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" }
+    ],
+    persona: 'grandma',
+    scamContext: 'USPS package smishing scam'
+  });
+  console.log(`✅ Persona Grandma Reply: "${honeypotRes.reply}"`);
+  console.log(`✅ Time Wasted: ${honeypotRes.timeWastedMinutes} mins | Extracted Intel:`, honeypotRes.extractedIntel);
+
+  // 2d. Zero-Trust Sandbox
+  console.log('\n--- 2d. Testing Zero-Trust URL Sandbox ---');
+  const { inspectUrlSandbox } = await import('./services/sandboxService.js');
+  const sandboxRes = await inspectUrlSandbox("https://usps-update-parcel.top/verify");
+  console.log(`✅ Sandbox domain: ${sandboxRes.domain} (Risk: ${sandboxRes.riskScore}/100)`);
+  console.log(`✅ Neutralized scripts: ${sandboxRes.securityAudit.scriptsNeutralized} | Blocked cookies: ${sandboxRes.securityAudit.cookiesBlocked}`);
+
   // 3. Storage & Scan Persistence
   console.log('\n--- 3. Testing Storage Persistence ---');
   const testUserId = 'test-analyst-uuid';

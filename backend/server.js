@@ -4,6 +4,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import scanRoutes from './routes/scanRoutes.js';
 import communityRoutes from './routes/communityRoutes.js';
+import sandboxRoutes from './routes/sandboxRoutes.js';
+import honeypotRoutes from './routes/honeypotRoutes.js';
 import { isSupabaseConfigured } from './services/supabaseService.js';
 
 const app = express();
@@ -57,6 +59,8 @@ app.get('/api/health', (req, res) => {
 // API Routes
 app.use('/api', scanRoutes);
 app.use('/api', communityRoutes);
+app.use('/api', sandboxRoutes);
+app.use('/api', honeypotRoutes);
 
 // 404 Handler
 app.use((req, res) => {

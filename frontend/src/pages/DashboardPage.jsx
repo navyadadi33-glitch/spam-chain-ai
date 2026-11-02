@@ -20,13 +20,18 @@ import {
   RotateCcw,
   ArrowRight,
   PhoneCall,
-  MessageSquare
+  MessageSquare,
+  Bot,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import MessageInput from '../components/MessageInput';
 import RiskGauge from '../components/RiskGauge';
 import SpamChainView from '../components/SpamChainView';
 import LoadingSkeleton from '../components/LoadingSkeleton';
+import TokenHeatmap from '../components/TokenHeatmap';
+import ZeroTrustSandbox from '../components/ZeroTrustSandbox';
+import ScamBaiterModal from '../components/ScamBaiterModal';
 
 export default function DashboardPage() {
   const { token, user, signInDemoUser } = useAuth();
@@ -34,6 +39,8 @@ export default function DashboardPage() {
   const [currentScan, setCurrentScan] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isHoneypotOpen, setIsHoneypotOpen] = useState(false);
+  const [isSandboxOpen, setIsSandboxOpen] = useState(false);
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -178,6 +185,7 @@ ${currentScan.recommendations?.map(r => `- ${r}`).join('\n')}
 
   const verdict = currentScan ? getVerdictTheme(currentScan.risk_level, currentScan.risk_score) : null;
   const VerdictIcon = verdict?.icon;
+  const detectedUrl = currentScan?.raw_message?.match(/(https?:\/\/[^\s]+|[a-zA-Z0-9-]+\.(xyz|top|ru|cn|buzz|link|click|cfd|online)[^\s]*)/i)?.[0];
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-10">
@@ -281,7 +289,31 @@ ${currentScan.recommendations?.map(r => `- ${r}`).join('\n')}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsHoneypotOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 cursor-pointer"
+                    title="Deploy autonomous AI honeypot counter-agent against this scammer"
+                  >
+                    <Bot className="w-3.5 h-3.5 text-indigo-200" />
+                    <span>Deploy Honeypot</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSandboxOpen(!isSandboxOpen)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      isSandboxOpen 
+                        ? 'bg-cyan-500 text-slate-950 font-extrabold'
+                        : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/30'
+                    }`}
+                    title="Inspect external links in isolated zero-trust sandbox"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>{isSandboxOpen ? 'Hide Sandbox' : 'Link Sandbox'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleCopyReport}
@@ -296,7 +328,7 @@ ${currentScan.recommendations?.map(r => `- ${r}`).join('\n')}
                     ) : (
                       <>
                         <Share2 className="w-3.5 h-3.5 text-slate-300" />
-                        <span>Copy Report</span>
+                        <span>Copy</span>
                       </>
                     )}
                   </button>
@@ -323,6 +355,20 @@ ${currentScan.recommendations?.map(r => `- ${r}`).join('\n')}
               {currentScan.explanation}
             </p>
           </div>
+
+          {/* Explainable AI (XAI) Token Heatmap */}
+          <TokenHeatmap
+            rawMessage={currentScan.raw_message}
+            highlights={currentScan.token_highlights || currentScan.tokenHighlights}
+          />
+
+          {/* Zero-Trust Webpage Sandbox Viewer */}
+          {isSandboxOpen && (
+            <ZeroTrustSandbox
+              detectedUrl={detectedUrl}
+              onClose={() => setIsSandboxOpen(false)}
+            />
+          )}
 
           {/* 2-Column Grid: Detected Reasons vs Recommended Actions */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -419,6 +465,13 @@ ${currentScan.recommendations?.map(r => `- ${r}`).join('\n')}
           </p>
         </div>
       )}
+
+      {/* Autonomous Counter-Spammer Honeypot Modal */}
+      <ScamBaiterModal
+        initialScamMessage={currentScan?.raw_message}
+        isOpen={isHoneypotOpen}
+        onClose={() => setIsHoneypotOpen(false)}
+      />
 
     </div>
   );
