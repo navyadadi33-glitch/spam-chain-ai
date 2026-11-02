@@ -98,3 +98,4 @@ export async function inspectUrlSandbox(rawUrl) {
     threatFlags: threatFlags.length > 0 ? threatFlags : ['Domain monitored under zero-trust inspection']
   };
 }
+

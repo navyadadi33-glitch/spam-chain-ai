@@ -29,3 +29,4 @@ router.post('/honeypot/respond', async (req, res) => {
 });
 
 export default router;
+

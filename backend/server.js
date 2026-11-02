@@ -37,8 +37,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health & System Info Route
-app.get('/api/health', (req, res) => {
+// Explicit Preflight OPTIONS handler for cross-origin requests
+app.options('*', cors());
+
+// Health & System Info Route (available at /, /health, and /api/health)
+app.get(['/', '/health', '/api/health'], (req, res) => {
   const hasGeminiKey = Boolean(
     process.env.GEMINI_API_KEY && 
     !process.env.GEMINI_API_KEY.includes('your_gemini_api_key')
@@ -52,15 +55,30 @@ app.get('/api/health', (req, res) => {
     services: {
       geminiAi: hasGeminiKey ? `connected (live model: ${process.env.GEMINI_MODEL || 'gemini-3.8-flash'})` : 'heuristic intelligence mode (ready for live API key)',
       database: isSupabaseConfigured ? 'supabase postgres (connected)' : 'high-speed local cache (ready for Supabase credentials)'
-    }
+    },
+    supportedEndpoints: [
+      'POST /api/analyze (or /analyze)',
+      'GET /api/scans (or /scans)',
+      'GET /api/community (or /community)',
+      'POST /api/sandbox/inspect (or /sandbox/inspect)',
+      'POST /api/honeypot/respond (or /honeypot/respond)',
+      'GET /api/health (or /health)'
+    ]
   });
 });
 
-// API Routes
+// API Routes: mounted with /api prefix AND root prefix for seamless production hosting
 app.use('/api', scanRoutes);
+app.use('/', scanRoutes);
+
 app.use('/api', communityRoutes);
+app.use('/', communityRoutes);
+
 app.use('/api', sandboxRoutes);
+app.use('/', sandboxRoutes);
+
 app.use('/api', honeypotRoutes);
+app.use('/', honeypotRoutes);
 
 // 404 Handler
 app.use((req, res) => {

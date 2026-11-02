@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, ShieldCheck, ShieldAlert, Lock, AlertTriangle, ExternalLink, RefreshCw, Layers, CheckCircle } from 'lucide-react';
+import { API_BASE } from '../apiConfig';
 
 export default function ZeroTrustSandbox({ detectedUrl, onClose }) {
   const [urlInput, setUrlInput] = useState(detectedUrl || 'https://usps-update-parcel.top/verify');
@@ -12,7 +13,7 @@ export default function ZeroTrustSandbox({ detectedUrl, onClose }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/sandbox/inspect', {
+      const res = await fetch(`${API_BASE}/sandbox/inspect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: targetUrl })
@@ -231,3 +232,4 @@ export default function ZeroTrustSandbox({ detectedUrl, onClose }) {
     </div>
   );
 }
+

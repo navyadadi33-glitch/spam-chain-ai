@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, User, Clock, DollarSign, Target, Send, Sparkles, X, Shield, RefreshCw } from 'lucide-react';
+import { API_BASE } from '../apiConfig';
 
 const PERSONAS = [
   {
@@ -53,7 +54,7 @@ export default function ScamBaiterModal({ initialScamMessage, isOpen, onClose })
         setUserInput('');
       }
 
-      const res = await fetch('/api/honeypot/respond', {
+      const res = await fetch(`${API_BASE}/honeypot/respond`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -295,3 +296,4 @@ export default function ScamBaiterModal({ initialScamMessage, isOpen, onClose })
     </div>
   );
 }
+

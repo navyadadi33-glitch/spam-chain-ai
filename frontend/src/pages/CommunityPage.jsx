@@ -13,14 +13,13 @@ import {
   Plus
 } from 'lucide-react';
 import ScanCard from '../components/ScanCard';
+import { API_BASE } from '../apiConfig';
 
 export default function CommunityPage() {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
   const fetchCommunityFeed = async () => {
     setLoading(true);

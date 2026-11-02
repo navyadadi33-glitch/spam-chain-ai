@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ScanCard from '../components/ScanCard';
+import { API_BASE } from '../apiConfig';
 
 export default function HistoryPage() {
   const { token, user, signInDemoUser } = useAuth();
@@ -23,8 +24,6 @@ export default function HistoryPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('ALL');
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
   const fetchScans = async () => {
     setLoading(true);

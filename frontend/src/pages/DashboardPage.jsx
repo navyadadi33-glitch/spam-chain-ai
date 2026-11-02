@@ -32,6 +32,7 @@ import LoadingSkeleton from '../components/LoadingSkeleton';
 import TokenHeatmap from '../components/TokenHeatmap';
 import ZeroTrustSandbox from '../components/ZeroTrustSandbox';
 import ScamBaiterModal from '../components/ScamBaiterModal';
+import { API_BASE } from '../apiConfig';
 
 export default function DashboardPage() {
   const { token, user, signInDemoUser } = useAuth();
@@ -41,8 +42,6 @@ export default function DashboardPage() {
   const [copied, setCopied] = useState(false);
   const [isHoneypotOpen, setIsHoneypotOpen] = useState(false);
   const [isSandboxOpen, setIsSandboxOpen] = useState(false);
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
   const handleAnalyze = async (payload) => {
     setErrorMsg('');
