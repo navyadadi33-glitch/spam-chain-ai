@@ -1,0 +1,13 @@
+{
+  "name": "spamchain-ai-root",
+  "version": "1.0.0",
+  "description": "SpamChain AI - End-to-End Threat Intelligence & Scam Chain Parser",
+  "scripts": {
+    "dev:backend": "cd backend && node --watch server.js",
+    "start:backend": "cd backend && node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "test:backend": "cd backend && node test-backend.js"
+  }
+}
+
